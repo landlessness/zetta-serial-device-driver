@@ -6,11 +6,22 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "author": "Brian Mulloy <brian@landlessness.net>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/landlessness/zetta-serial-device-driver"
+  },
   "dependencies": {
     "zetta-device": "*",
-    "zetta-scout": "*"
+    "zetta-scout": "*",
+    "serialport": "*",
+    "async": "*"
   },
+  "bugs": {
+    "url": "https://github.com/landlessness/zetta-serial-device-driver/issues"
+  },
+  "homepage": "https://github.com/landlessness/zetta-serial-device-driver",
   "directories": {
     "example": "example"
   },
