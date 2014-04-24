@@ -19,14 +19,14 @@ SerialDevice.prototype.init = function(config) {
   .name('Serial Device')
   .type('serial')
   .state('waiting')
-  .when('waiting', { allow: ['write', 'parse', 'enqueue']})
-  .when('writing', { allow: ['write', 'parse', 'enqueue']})
-  .when('parsing', { allow: ['write', 'parse', 'enqueue']})
-  .map('enqueue', this.enqueue, 
-    [{ name: 'command', type: 'text'},
-    { name: 'regexp', type: 'text'}])
-  .map('write', this.write, [{ name: 'command', type: 'text'}])
-  .map('parse', this.parse, [{ name: 'data', type: 'text'}, { name: 'regexp', type: 'text'}]);
+  .when('waiting', { allow: ['write', 'parse']})
+  .when('writing', { allow: ['write', 'parse']})
+  .when('parsing', { allow: ['write', 'parse']})
+  .map('write', this.write, [
+    { name: 'command', type: 'text'}])
+  .map('parse', this.parse, [
+    { name: 'data', type: 'text'},
+    { name: 'regexp', type: 'text'}]);
 
   this._setupWriteParseQueue(function() {});
 };
@@ -109,13 +109,7 @@ SerialDevice.prototype._setupWriteParseQueue = function(cb) {
   cb();
 }
 
-SerialDevice.prototype.enqueue = function(command, regexp, cb) {
-  this._enqueue(
-    { command: command, regexps: [new RegExp(regexp)] }, cb
-  );
-}
-
-SerialDevice.prototype._enqueue = function(command, cb) {
+SerialDevice.prototype.enqueue = function(command, cb) {
   var self = this;
   this._q.push(
     command,
@@ -134,7 +128,7 @@ SerialDevice.prototype._enqueue = function(command, cb) {
   );
 }
 
-SerialDevice.prototype._enqueueSimple = function(command, regexp, cb) {
+SerialDevice.prototype.enqueueSimple = function(command, regexp, cb) {
   this._enqueue({
     command: command, 
     regexps: [new RegExp(RegExp.quote(command) + '\\s*'), regexp, /^$/, /OK/]},
