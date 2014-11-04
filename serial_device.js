@@ -129,7 +129,7 @@ SerialDevice.prototype.enqueue = function(command, cb) {
 }
 
 SerialDevice.prototype.enqueueSimple = function(command, regexp, cb) {
-  this._enqueue({
+  this.enqueue({
     command: command, 
     regexps: [new RegExp(RegExp.quote(command) + '\\s*'), regexp, /^$/, /OK/]},
     function (matches) {
