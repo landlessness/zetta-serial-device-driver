@@ -1,10 +1,10 @@
 module.exports = function testApp(server) {
   
-  var starterDeviceQuery = server.where({type: 'starter'});
+  var serialDeviceQuery = server.where({type: 'serial'});
   
-  server.observe([starterDeviceQuery], function(starterDevice){
+  server.observe([serialDeviceQuery], function(serialDevice){
     setInterval(function(){
-      starterDevice.call('do', './app.js is running', function() {});
+      serialDevice.call('do', './app.js is running', function() {});
     }, 5000);
   });
   

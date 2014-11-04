@@ -1,14 +1,14 @@
 var Scout = require('zetta-scout');
 var util = require('util');
-var StarterDevice = require('./starter_device');
+var SerialDevice = require('./serial_device');
 
-var StarterDeviceScout = module.exports = function() {
+var SerialDeviceScout = module.exports = function() {
   Scout.call(this);
 };
-util.inherits(StarterDeviceScout, Scout);
+util.inherits(SerialDeviceScout, Scout);
 
-StarterDeviceScout.prototype.init = function(next) {
+SerialDeviceScout.prototype.init = function(next) {
   var self = this;
-  self.discover(StarterDevice, {default: 'DEFAULT'});
+  self.discover(SerialDevice, {default: 'DEFAULT'});
   next();
 }

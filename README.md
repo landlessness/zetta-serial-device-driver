@@ -1,16 +1,16 @@
-##Zetta starter device driver for any platform
+##Zetta serial device driver for any platform
 
 ###Install
 
 ```
-$> npm install zetta-starter-device-driver
+$> npm install zetta-serial-device-driver
 ```
 
 ###Usage
 
 ```
 var zetta = require('zetta');
-var StarterDevice = require('zetta-starter-device-driver');
+var StarterDevice = require('zetta-serial-device-driver');
 
 zetta()
   .use(StarterDevice)
@@ -29,4 +29,4 @@ Calls the device's log() function passing the message param.
 
 ###Design
 
-This device driver is designed to be the starter code for other device drivers.
+This device driver is designed to be the serial code for other device drivers.
