@@ -4,6 +4,10 @@ var async = require('async');
 
 var SerialDevice = module.exports = function() {
   Device.call(this);
+  
+  this.highPriority = 1;
+  this.lowPriority = 3;
+  
   this._serialPort = arguments[0];
 
   this._serialPort.on('data', function(data) {
@@ -74,6 +78,8 @@ SerialDevice.prototype._setupWriteParseQueue = function(cb) {
     self._matches = [];
     self._callback = callback;
 
+    console.log('task:', task);
+
     // Prepare to Parse
     self.log('add serial port listener');
     self._serialPort.on('data', parseData);
@@ -81,7 +87,7 @@ SerialDevice.prototype._setupWriteParseQueue = function(cb) {
     // Write
     if (!!task.rawCommand) {
       self.call('write', task.rawCommand);
-    } else {
+    } else if (!!task.command) {
       self.call('write', task.command + "\n\r");
     }
 
@@ -113,7 +119,7 @@ SerialDevice.prototype.enqueue = function(command, cb) {
   var self = this;
   this._q.push(
     command,
-    1,
+    command.priority || this.lowPriority,
     function (err) {
       var matches = arguments[0];
       cb(matches);
