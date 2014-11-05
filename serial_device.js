@@ -6,6 +6,7 @@ var SerialDevice = module.exports = function() {
   Device.call(this);
   
   this.highPriority = 1;
+  this.mediumPriority = 2;
   this.lowPriority = 3;
   
   this._serialPort = arguments[0];
@@ -33,6 +34,10 @@ SerialDevice.prototype.init = function(config) {
     { name: 'regexp', type: 'text'}]);
 
   this._setupWriteParseQueue(function() {});
+  
+  this._turnOffEcho();
+  this._testConnection();
+
 };
 
 SerialDevice.prototype.write = function(command, cb) {
@@ -134,13 +139,28 @@ SerialDevice.prototype.enqueue = function(command, cb) {
   );
 }
 
-SerialDevice.prototype.enqueueSimple = function(command, regexp, cb) {
+SerialDevice.prototype._turnOffEcho = function() {
+  var self = this;
+  
   this.enqueue({
-    command: command, 
-    regexps: [new RegExp(RegExp.quote(command) + '\\s*'), regexp, /^$/, /OK/]},
-    function (matches) {
-      cb(matches);
-    });
+    priority: self.mediumPriority, command: 'ATE0', regexps: [/^(ATE0|)\s*$/]},
+    function(matches) {
+      if (matches[0][1] == 'ATE0') {
+        self.enqueue({priority: self.highPriority, command: null, regexps: [/OK/]},
+        function() {});
+      }
+  });
+}
+
+SerialDevice.prototype._testConnection = function() {
+  var self = this;
+  
+  for (i = 0; i < 3; i++) { 
+    this.enqueue({
+      priority: self.mediumPriority, command: 'AT', regexps: [/^(OK|)\s*$/]},
+      function() {});
+  }
+  
 }
 
 RegExp.quote = function(str) {
