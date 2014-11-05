@@ -100,6 +100,11 @@ SerialDevice.prototype._setupQueue = function(cb) {
   }, 1);
 
   // Parse
+  
+  // TODO: need to figure out better approaches for:
+  // 1. when more data comes than expected causing problems for next task
+  // 2. when not enough data comes for current task
+  
   var parseData = function(data) {
     self.log('parseData');
     var regexp = self._regexps[self._regexpIndex];
@@ -114,6 +119,7 @@ SerialDevice.prototype._setupQueue = function(cb) {
         console.log('matches: ', self._matches);
         self._onMatch(self._matches);
         self._callback();
+      } else {
       }
     });
   }
