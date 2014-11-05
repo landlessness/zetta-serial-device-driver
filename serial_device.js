@@ -5,9 +5,10 @@ var async = require('async');
 var SerialDevice = module.exports = function() {
   Device.call(this);
   
-  this.highPriority = 1;
-  this.mediumPriority = 2;
-  this.lowPriority = 3;
+  this.sysPriority = 1;
+  this.highPriority = 2;
+  this.mediumPriority = 3;
+  this.lowPriority = 4;
   
   this._serialPort = arguments[0];
 
@@ -33,8 +34,7 @@ SerialDevice.prototype.init = function(config) {
     { name: 'data', type: 'text'},
     { name: 'regexp', type: 'text'}]);
 
-  this._setupWriteParseQueue(function() {});
-  
+  this._setupQueue(function() {});
   this._turnOffEcho();
   this._testConnection();
 
@@ -43,8 +43,8 @@ SerialDevice.prototype.init = function(config) {
 SerialDevice.prototype.write = function(command, cb) {
   this.state = 'writing';
   var self = this;
-  this.log('command: ' + command);
-  this.log('command (encoded): ' + encodeURI(command));
+  this.log('writing: ' + command);
+  this.log('writing (url encoded): ' + encodeURI(command));
   this._serialPort.write(command, function(err, results) {
     if (typeof err !== 'undefined') {
       self.log('write err ' + err);
@@ -66,6 +66,7 @@ SerialDevice.prototype.parse = function(data, regexp, cb) {
     this.log('failed match on data: ' + data);
     this.log('with regexp: ' + this._regexps[this._regexpIndex].toString());
     this.log('URI encoded data: ' + encodeURI(data));
+    this.log('Error: failed match');
     throw new Error('failed match');
   }
   this.state = 'waiting';
@@ -73,14 +74,15 @@ SerialDevice.prototype.parse = function(data, regexp, cb) {
   cb(null, match);
 };
 
-SerialDevice.prototype._setupWriteParseQueue = function(cb) {
+SerialDevice.prototype._setupQueue = function(cb) {
 
   var self = this;
-  
-  this._q = async.priorityQueue(function (task, callback) {
+
+  this._q = async.priorityQueue(function lilWorker(task, callback) {
     self._regexpIndex = 0;
     self._regexps = task.regexps;
     self._matches = [];
+    self._onMatch = task.onMatch || function(){};
     self._callback = callback;
 
     console.log('task:', task);
@@ -95,9 +97,7 @@ SerialDevice.prototype._setupWriteParseQueue = function(cb) {
     } else if (!!task.command) {
       self.call('write', task.command + "\n\r");
     }
-
   }, 1);
-
 
   // Parse
   var parseData = function(data) {
@@ -112,7 +112,8 @@ SerialDevice.prototype._setupWriteParseQueue = function(cb) {
         self.log('remove serial port listener');
         self._serialPort.removeListener('data', parseData);
         console.log('matches: ', self._matches);
-        self._callback(self._matches);
+        self._onMatch(self._matches);
+        self._callback();
       }
     });
   }
@@ -120,17 +121,18 @@ SerialDevice.prototype._setupWriteParseQueue = function(cb) {
   cb();
 }
 
-SerialDevice.prototype.enqueue = function(command, cb) {
-  var self = this;
+SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
+  var priority = priority || this.lowPriority;
+
   this._q.push(
-    command,
-    command.priority || this.lowPriority,
-    function (err) {
-      var matches = arguments[0];
-      cb(matches);
-    });
+    tasks,
+    priority,
+    callback
+  );
+
   this.log(
-    'queue #length: ' + this._q.length() +
+    ' q' +
+    ' #length: ' + this._q.length() +
     ' #started: ' + this._q.started +
     ' #running: ' + this._q.running() +
     ' #idle: ' + this._q.idle() +
@@ -139,28 +141,39 @@ SerialDevice.prototype.enqueue = function(command, cb) {
   );
 }
 
+// turn off echo so that we parse less
 SerialDevice.prototype._turnOffEcho = function() {
   var self = this;
-  
-  this.enqueue({
-    priority: self.mediumPriority, command: 'ATE0', regexps: [/^(ATE0|)\s*$/]},
-    function(matches) {
-      if (matches[0][1] == 'ATE0') {
-        self.enqueue({priority: self.highPriority, command: null, regexps: [/OK/]},
-        function() {});
-      }
-  });
-}
 
-SerialDevice.prototype._testConnection = function() {
-  var self = this;
-  
-  for (i = 0; i < 3; i++) { 
-    this.enqueue({
-      priority: self.mediumPriority, command: 'AT', regexps: [/^(OK|)\s*$/]},
-      function() {});
+  var onMatch = function(matches) {
+    if (matches[0][1] == 'ATE0') {
+      self.enqueue({regexps: [/OK/]});
+    }
   }
+
+  var task = { 
+    command: 'ATE0', 
+    regexps: [/^$/,/OK/],
+    onMatch: onMatch
+  };
+
+  this.enqueue(task, this.sysPriority);
+}
   
+// send 3 AT OK commands as a batch to test connection
+SerialDevice.prototype._testConnection = function() {
+
+  var tasks = [];
+
+  for (i = 0; i < 3; i++) {
+    tasks.push({
+      command: 'AT', 
+      regexps: [/^$/, /OK/]
+    });
+  }
+
+  this.enqueue(tasks, this.sysPriority);
+
 }
 
 RegExp.quote = function(str) {
