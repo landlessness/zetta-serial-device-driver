@@ -151,16 +151,9 @@ SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
 SerialDevice.prototype._turnOffEcho = function() {
   var self = this;
 
-  var onMatch = function(matches) {
-    if (matches[0][1] == 'ATE0') {
-      self.enqueue({regexps: [/OK/]});
-    }
-  }
-
-  var task = { 
-    command: 'ATE0', 
-    regexps: [/^$/,/OK/],
-    onMatch: onMatch
+  var task = {
+    command: 'ATE0',
+    regexps: [/^ATE0|$/,/OK/]
   };
 
   this.enqueue(task, this.sysPriority);
