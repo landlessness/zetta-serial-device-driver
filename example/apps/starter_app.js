@@ -4,7 +4,7 @@ module.exports = function testApp(server) {
   
   server.observe([serialDeviceQuery], function(serialDevice){
     setInterval(function(){
-      serialDevice.enqueue({command: 'AT', regexps: [/AT/, /OK/]}, function() {});
+      serialDevice.enqueue({command: 'AT', regexps: [/^$/, /OK/]}, function() {});
     }, 5000);
   });
   
