@@ -1,6 +1,6 @@
 {
   "name": "zetta-serial-device-driver",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Zetta serial device driver for any platform",
   "main": "index.js",
   "scripts": {
