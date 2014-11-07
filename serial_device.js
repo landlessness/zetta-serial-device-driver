@@ -29,7 +29,7 @@ SerialDevice.prototype.init = function(config) {
     { name: 'data', type: 'text'},
     { name: 'regexp', type: 'text'}]);
 
-  this._serialPort.on('data', this._parseData);
+  this._serialPort.on('data', this._showRawStream);
   
   this._setupQueue(function() {});
   this._turnOffEcho();
@@ -37,9 +37,26 @@ SerialDevice.prototype.init = function(config) {
 
 };
 
-SerialDevice.prototype._parseData = function(data) {
+SerialDevice.prototype._showRawStream = function(data) {
   console.log('RAW ===\n\n' + data + '\n\n=== RAW');
 }
+
+// Parse
+
+// TODO: need to figure out better approaches for:
+// 1. when more data comes than expected causing problems for next task
+// 2. when not enough data comes for current task
+SerialDevice.prototype._parseTaskData = function(task, data, callback) {
+  this.log('parseTaskData');
+  this.call('parse', data, task.regexp, function(err, match) {
+    console.log('match: ', match);
+    if (task.callback instanceof Function) {
+      task.callback(match);
+    }
+    callback();
+  });
+}
+
     
 SerialDevice.prototype.write = function(command, cb) {
   this.state = 'writing';
@@ -88,7 +105,7 @@ SerialDevice.prototype._setupQueue = function(cb) {
     }
 
     self._serialPort.once('data', function (data) {
-      parseTaskData(task, data, callback);
+      self._parseTaskData(task, data, callback);
     });
     
     // Write
@@ -99,23 +116,6 @@ SerialDevice.prototype._setupQueue = function(cb) {
     }
 
   }, 1);
-
-  // Parse
-  
-  // TODO: need to figure out better approaches for:
-  // 1. when more data comes than expected causing problems for next task
-  // 2. when not enough data comes for current task
-  
-  var parseTaskData = function(task, data, callback) {
-    self.log('parseTaskData');
-    self.call('parse', data, task.regexp, function(err, match) {
-      console.log('match: ', match);
-      if (task.callback instanceof Function) {
-        task.callback(match);
-      }
-      callback();
-    });
-  }
 
   cb();
 }
