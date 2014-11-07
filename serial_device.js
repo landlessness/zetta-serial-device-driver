@@ -5,17 +5,12 @@ var async = require('async');
 var SerialDevice = module.exports = function() {
   Device.call(this);
   
+  this._serialPort = arguments[0];
+
   this.sysPriority = 1;
   this.highPriority = 2;
   this.mediumPriority = 3;
   this.lowPriority = 4;
-  
-  this._serialPort = arguments[0];
-
-  this._serialPort.on('data', function(data) {
-    console.log('RAW ===\n\n' + data + '\n\n=== RAW');
-  });
-  
 };
 util.inherits(SerialDevice, Device);
 
@@ -34,12 +29,18 @@ SerialDevice.prototype.init = function(config) {
     { name: 'data', type: 'text'},
     { name: 'regexp', type: 'text'}]);
 
+  this._serialPort.on('data', this._parseData);
+  
   this._setupQueue(function() {});
   this._turnOffEcho();
   this._testConnection();
 
 };
 
+SerialDevice.prototype._parseData = function(data) {
+  console.log('RAW ===\n\n' + data + '\n\n=== RAW');
+}
+    
 SerialDevice.prototype.write = function(command, cb) {
   this.state = 'writing';
   var self = this;
@@ -64,7 +65,7 @@ SerialDevice.prototype.parse = function(data, regexp, cb) {
     this.log('match: true');
   } else {
     this.log('failed match on data: ' + data);
-    this.log('with regexp: ' + this._regexps[this._regexpIndex].toString());
+    this.log('with regexp: ' + regexp.toString());
     this.log('URI encoded data: ' + encodeURI(data));
     this.log('Error: failed match');
     throw new Error('failed match');
@@ -78,25 +79,25 @@ SerialDevice.prototype._setupQueue = function(cb) {
 
   var self = this;
 
-  this._q = async.priorityQueue(function lilWorker(task, callback) {
-    self._regexpIndex = 0;
-    self._regexps = task.regexps;
-    self._matches = [];
-    self._onMatch = task.onMatch || function(){};
-    self._callback = callback;
-
+  this._q = async.priorityQueue(function taskWorker(task, callback) {
     console.log('task:', task);
+    
+    // Nothing to parse? Then this is a mistake.
+    if (!(task.regexp instanceof RegExp)) {
+      throw new Error('Task is missing a regexp.');
+    }
 
-    // Prepare to Parse
-    self.log('add serial port listener');
-    self._serialPort.on('data', parseData);
-     
+    self._serialPort.once('data', function (data) {
+      parseTaskData(task, data, callback);
+    });
+    
     // Write
     if (!!task.rawCommand) {
       self.call('write', task.rawCommand);
     } else if (!!task.command) {
       self.call('write', task.command + "\n\r");
     }
+
   }, 1);
 
   // Parse
@@ -105,22 +106,14 @@ SerialDevice.prototype._setupQueue = function(cb) {
   // 1. when more data comes than expected causing problems for next task
   // 2. when not enough data comes for current task
   
-  var parseData = function(data) {
-    self.log('parseData');
-    var regexp = self._regexps[self._regexpIndex];
-    self.call('parse', data, regexp, function(err, match) {
-      self.log('add match to matches array');
+  var parseTaskData = function(task, data, callback) {
+    self.log('parseTaskData');
+    self.call('parse', data, task.regexp, function(err, match) {
       console.log('match: ', match);
-      self._matches.push(match);
-      self._regexpIndex++;
-      if (self._regexpIndex >= self._regexps.length) {
-        self.log('remove serial port listener');
-        self._serialPort.removeListener('data', parseData);
-        console.log('matches: ', self._matches);
-        self._onMatch(self._matches);
-        self._callback();
-      } else {
+      if (task.callback instanceof Function) {
+        task.callback(match);
       }
+      callback();
     });
   }
 
@@ -151,12 +144,16 @@ SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
 SerialDevice.prototype._turnOffEcho = function() {
   var self = this;
 
-  var task = {
+  var tasks = [
+  {    
     command: 'ATE0',
-    regexps: [/^ATE0|$/,/OK/]
-  };
+    regexp: /^ATE0|$/
+  },
+  {
+    regexp: /OK/
+  }];
 
-  this.enqueue(task, this.sysPriority);
+  this.enqueue(tasks, this.sysPriority);
 }
   
 // send 3 AT OK commands as a batch to test connection
@@ -165,10 +162,8 @@ SerialDevice.prototype._testConnection = function() {
   var tasks = [];
 
   for (i = 0; i < 3; i++) {
-    tasks.push({
-      command: 'AT', 
-      regexps: [/^$/, /OK/]
-    });
+    tasks.push({command: 'AT',regexp: /^$/});
+    tasks.push({regexp: /OK/});
   }
 
   this.enqueue(tasks, this.sysPriority);
