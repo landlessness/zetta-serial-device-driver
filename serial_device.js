@@ -75,7 +75,27 @@ SerialDevice.prototype.parse = function(data, regexp, cb) {
   cb(null, match);
 };
 
-// Parse
+SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
+  var priority = priority || this.lowPriority;
+
+  this._q.push(
+    tasks,
+    priority,
+    callback
+  );
+
+  this.log(
+    ' q' +
+    ' #length: ' + this._q.length() +
+    ' #started: ' + this._q.started +
+    ' #running: ' + this._q.running() +
+    ' #idle: ' + this._q.idle() +
+    ' #concurrency: ' + this._q.concurrency +
+    ' #paused: ' + this._q.paused
+  );
+}
+
+// Parse Task Data
 
 // TODO: need to figure out better approaches for:
 // 1. when more data comes than expected causing problems for next task
@@ -117,26 +137,6 @@ SerialDevice.prototype._setupQueue = function(cb) {
   }, 1);
 
   cb();
-}
-
-SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
-  var priority = priority || this.lowPriority;
-
-  this._q.push(
-    tasks,
-    priority,
-    callback
-  );
-
-  this.log(
-    ' q' +
-    ' #length: ' + this._q.length() +
-    ' #started: ' + this._q.started +
-    ' #running: ' + this._q.running() +
-    ' #idle: ' + this._q.idle() +
-    ' #concurrency: ' + this._q.concurrency +
-    ' #paused: ' + this._q.paused
-  );
 }
 
 // turn off echo so that we parse less
