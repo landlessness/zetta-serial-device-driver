@@ -6,6 +6,9 @@ var SerialDevice = module.exports = function() {
   Device.call(this);
   
   this._serialPort = arguments[0];
+  this._q = null;
+
+  this._perennialRegExps = [];
 
   this.sysPriority = 1;
   this.highPriority = 2;
@@ -20,60 +23,42 @@ SerialDevice.prototype.init = function(config) {
   .name('Serial Device')
   .type('serial')
   .state('waiting')
-  .when('waiting', { allow: ['write', 'parse']})
-  .when('writing', { allow: ['write', 'parse']})
-  .when('parsing', { allow: ['write', 'parse']})
+  .when('waiting', { allow: ['write', 'writeRaw', 'parse', 'at']})
+  .when('at', { allow: ['write', 'writeRaw', 'parse', 'at']})
+  .when('writing', { allow: ['write', 'writeRaw', 'parse']})
+  .when('parsing', { allow: ['write', 'writeRaw', 'parse']})
+  .map('at', this.at)
   .map('write', this.write, [
+    { name: 'command', type: 'text'}])
+  .map('writeRaw', this.writeRaw, [
     { name: 'command', type: 'text'}])
   .map('parse', this.parse, [
     { name: 'data', type: 'text'},
     { name: 'regexp', type: 'text'}]);
 
-  this._serialPort.on('data', this._showRawStream);
-  
-  this._setupQueue(function() {});
+  this._setupTaskQueue(function() {});
   this._turnOffEcho();
   this._testConnection();
 
 };
 
-SerialDevice.prototype._showRawStream = function(data) {
-  console.log('RAW ===\n\n' + data + '\n\n=== RAW');
-}
-
-SerialDevice.prototype.write = function(command, cb) {
-  this.state = 'writing';
+SerialDevice.prototype.at = function(cb) {
   var self = this;
-  this.log('writing: ' + command);
-  this.log('writing (url encoded): ' + encodeURI(command));
-  this._serialPort.write(command, function(err, results) {
-    if (typeof err !== 'undefined') {
-      self.log('write err ' + err);
-      self.log('write results ' + results);
-    }
-  });
-  this.state = 'waiting';
-  cb();
-};
-
-SerialDevice.prototype.parse = function(data, regexp, cb) {
-  this.state = 'parsing';
-  this.log('parsing data: "' + data + '"');
-  this.log('parsing regexp: "' + regexp + '"');
-  var match = data.match(regexp);
-  if (!!match) {
-    this.log('match: true');
-  } else {
-    this.log('failed match on data: ' + data);
-    this.log('with regexp: ' + regexp.toString());
-    this.log('URI encoded data: ' + encodeURI(data));
-    this.log('Error: failed match');
-    throw new Error('failed match');
+  var tasks = [
+  {
+    before: function() {self.state = 'at'},
+    command: 'AT',
+    regexp: /^$/
+  },
+  {
+    regexp: /OK/
   }
-  this.state = 'waiting';
-  this.log('match: ' + match);
-  cb(null, match);
-};
+  ];
+  this.enqueue(tasks, null, function() {
+    this.state = 'waiting';
+    cb();
+  });
+}
 
 SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
   var priority = priority || this.lowPriority;
@@ -95,44 +80,144 @@ SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
   );
 }
 
-// Parse Task Data
+SerialDevice.prototype.write = function(command, cb) {
+  this.writeRaw(command + "\n\r", cb);
+}
 
-// TODO: need to figure out better approaches for:
-// 1. when more data comes than expected causing problems for next task
-// 2. when not enough data comes for current task
-SerialDevice.prototype._parseTaskData = function(task, data, callback) {
-  this.log('parseTaskData');
+SerialDevice.prototype.writeRaw = function(command, cb) {
+  this.state = 'writing';
+  var self = this;
+  this.log('writing: ' + command);
+  this.log('writing (url encoded): ' + encodeURI(command));
+  this._serialPort.write(command, function(err, results) {
+    if (typeof err !== 'undefined') {
+      self.log('write err ' + err);
+      self.log('write results ' + results);
+    }
+  });
+  this.state = 'waiting';
+  cb();
+};
+
+SerialDevice.prototype.parse = function(data, regexp, cb) {
+  this.state = 'parsing';
+  this.log('parsing data: "' + data + '"');
+  this.log('parsing regexp: "' + regexp + '"');
+  var match = data.match(regexp);
+  this.state = 'waiting';
+  this.log('match: ' + match);
+  cb(null, match);
+};
+
+SerialDevice.prototype._parsePerennialTaskData = function(task, data, callback) {
+  this.log('_parsePerennialTaskData');
+
+  var self = this;
+
+  console.log('task.regexp: ', task.regexp);
+  console.log('data: ', data);
+  
   this.call('parse', data, task.regexp, function(err, match) {
     console.log('match: ', match);
-    if (task.callback instanceof Function) {
-      task.callback(match);
+
+    if (!!match) {
+      self.log('match: true');
+      if (task.before instanceof Function) {
+        task.before();
+      }
+      if (task.onMatch instanceof Function) {
+        task.onMatch(match);
+      }
     }
+    
     callback();
   });
 }
 
-SerialDevice.prototype._setupQueue = function(cb) {
+SerialDevice.prototype._parseTaskData = function(task, data, callback) {
+  this.log('parseTaskData');
+
+  // TODO: need to figure out better approaches for:
+  // 1. when more data comes than expected causing problems for next task
+  // 2. when not enough data comes for current task
+  
+  var self = this;
+  
+  this.call('parse', data, task.regexp, function(err, match) {
+    console.log('match: ', match);
+    
+    if (!!match) {
+      self.log('match: true');
+      if (task.onMatch instanceof Function) {
+        task.onMatch(match);
+      }
+    } else {
+      var perennialMatch = self._perennialRegExps.some(function (regexp) {
+        return regexp.test(data);
+      });
+      
+      if (perennialMatch) {
+        // if it's something the perennial is seeking then ignore
+        self.log('perennial match encountered and ignored by parse task.');
+      } else {
+        self.log('failed match on data: ' + data);
+        self.log('with regexp: ' + task.regexp.toString());
+        self.log('URI encoded data: ' + encodeURI(data));
+        self.log('Error: failed match');
+        throw new Error('failed match');
+      }
+    }
+    
+    callback();
+  });
+}
+
+// TODO: create a worker function and call priorityQueue from init()
+SerialDevice.prototype._setupTaskQueue = function(cb) {
 
   var self = this;
 
   this._q = async.priorityQueue(function taskWorker(task, callback) {
     console.log('task:', task);
     
-    // Nothing to parse? Then this is a mistake.
+    // No regular expression to parse? Then this is a mistake.
     if (!(task.regexp instanceof RegExp)) {
       throw new Error('Task is missing a regexp.');
     }
 
-    self._serialPort.once('data', function (data) {
-      self._parseTaskData(task, data, callback);
-    });
-    
-    // Write
-    if (!!task.rawCommand) {
-      self.call('write', task.rawCommand);
-    } else if (!!task.command) {
-      self.call('write', task.command + "\n\r");
+    if (task.perennial) {
+      self._perennialRegExps.push(task.regexp);
+      self._serialPort.on('data', function (data) {
+        self._parsePerennialTaskData(task, data, function() {});
+      });
+      callback();
+    } else {
+      if (task.before instanceof Function) {
+        task.before();
+      }
+      self._serialPort.once('data', function (data) {
+        self._parseTaskData(task, data, callback);
+      });
     }
+
+    // Write
+    if (!!task.command) {
+      self.call('write', task.command);
+    } else if (!!task.rawCommand) {
+      self.call('writeRaw', task.rawCommand);
+    }
+
+    self.log(
+      ' q' +
+      ' #length: ' + self._q.length() +
+      ' #started: ' + self._q.started +
+      ' #running: ' + self._q.running() +
+      ' #idle: ' + self._q.idle() +
+      ' #concurrency: ' + self._q.concurrency +
+      ' #paused: ' + self._q.paused
+    );
+
+    // TODO: figure out where task.after() should go
 
   }, 1);
 
