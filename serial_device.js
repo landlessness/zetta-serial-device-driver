@@ -18,7 +18,6 @@ var SerialDevice = module.exports = function() {
 util.inherits(SerialDevice, Device);
 
 SerialDevice.prototype.init = function(config) {
-  var self = this;
   config
   .name('Serial Device')
   .type('serial')
@@ -37,6 +36,8 @@ SerialDevice.prototype.init = function(config) {
     { name: 'regexp', type: 'text'}]);
 
   this._setupTaskQueue(function() {});
+
+  this._setupRawLog();
   this._turnOffEcho();
   this._testConnection();
 
@@ -63,6 +64,8 @@ SerialDevice.prototype.at = function(cb) {
 SerialDevice.prototype.enqueue = function(tasks, priority, callback) {
   var priority = priority || this.lowPriority;
 
+  console.log('enqueue tasks: ', tasks);
+  
   this._q.push(
     tasks,
     priority,
@@ -169,6 +172,13 @@ SerialDevice.prototype._parseTaskData = function(task, data, callback) {
     }
     
     callback();
+  });
+}
+
+SerialDevice.prototype._setupRawLog = function(cb) {
+  var self = this;
+  this._serialPort.on('data', function(data) {
+    self.log('\n\n### RAW SERIAL IN\n' + data + '\n### RAW SERIAL IN\n');
   });
 }
 
