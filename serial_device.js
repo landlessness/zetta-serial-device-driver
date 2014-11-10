@@ -90,8 +90,9 @@ SerialDevice.prototype.write = function(command, cb) {
 SerialDevice.prototype.writeRaw = function(command, cb) {
   this.state = 'writing';
   var self = this;
-  this.log('writing: ' + command);
-  this.log('writing (url encoded): ' + encodeURI(command));
+
+  self.log('\n\n### RAW SERIAL OUT\n' + command + '### RAW SERIAL OUT\n');
+
   this._serialPort.write(command, function(err, results) {
     if (typeof err !== 'undefined') {
       self.log('write err ' + err);
