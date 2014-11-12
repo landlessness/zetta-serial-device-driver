@@ -98,9 +98,9 @@ SerialDevice.prototype.writeRaw = function(command, cb) {
       self.log('write err ' + err);
       self.log('write results ' + results);
     }
+    this.state = 'waiting';
+    cb();
   });
-  this.state = 'waiting';
-  cb();
 };
 
 SerialDevice.prototype.parse = function(data, regexp, cb) {
